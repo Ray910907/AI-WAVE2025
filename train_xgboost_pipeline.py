@@ -7,7 +7,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import classification_report, roc_auc_score, f1_score, confusion_matrix
 from xgboost import XGBClassifier
-from xgboost.fraud_detection_processing import (
+from fraud_detection_processing import (
     preprocess_accts, preprocess_id, preprocess_transactions,
     aggregate_transaction_features, calculate_account_behavior_changes,
     extract_network_features, prepare_model_features
