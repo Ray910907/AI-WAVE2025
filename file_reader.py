@@ -50,6 +50,8 @@ class file_reader:
         acc_info = acc_info.fillna(fill_na)
         for col in remaining_columns:
             acc_info[col] = acc_info[col].fillna(0)
+        acc_info = acc_info.drop(columns=['CUST_ID'], errors='ignore')
+
 
         return acc_info, label, id2index
 
