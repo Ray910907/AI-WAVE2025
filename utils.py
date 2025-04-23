@@ -54,7 +54,7 @@ def split_train_test(data, label, test_size=0.2, random_state=42):
     X_train, X_test, y_train, y_test = train_test_split(
         data, label, test_size=test_size, random_state=random_state
     )
-    X_train = X_train.drop(columns=['CUST_ID'])
+    X_train = X_train.drop(columns=['ACCT_NBR'])
     #to dataframe
     X_train = pd.DataFrame(X_train, columns=columns)
     X_test = pd.DataFrame(X_test, columns=columns)
@@ -88,9 +88,8 @@ def vote_for_prediction(predictions, data):
     df = pd.DataFrame(data)
     df['prediction'] = predictions
 
-    # 對於同樣CUST_ID的預測結果進行投票
-    df['vote'] = df.groupby('CUST_ID')['prediction'].transform(lambda x: x.mode()[0] if not x.mode().empty else 0) 
-    vote_result = df.groupby('CUST_ID')['vote'].first().reset_index()
+    df['vote'] = df.groupby('ACCT_NBR')['prediction'].transform(lambda x: x.mode()[0] if not x.mode().empty else 0) 
+    vote_result = df.groupby('ACCT_NBR')['vote'].first().reset_index()
 
 
 
