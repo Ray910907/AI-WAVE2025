@@ -11,7 +11,7 @@ from sklearn.metrics import accuracy_score
 
 def xgboost_by_account(data,label):
 
-    X_train, X_test, y_train, y_test = train_test_split(data, label, test_size=0.2, random_state=888)
+    X_train, X_test, y_train, y_test = train_test_split(data, label, test_size=0.5, random_state=888)
     X_train, y_train = balance_data(X_train, y_train)
 
     # Create DMatrix for XGBoost
@@ -33,9 +33,31 @@ def xgboost_by_account(data,label):
 
 def xgboost_by_transaction(data,label):
 
-    X_train, X_test, y_train, y_test = split_train_test(data, label)
-    #X_train, y_train = balance_data(X_train, y_train)
+    # Split data into training and testing sets ensuring ACCT_NBR in train does not appear in test
+    data['label'] = label
+    unique_accounts = data['ACCT_NBR'].unique()
+    train_accounts, test_accounts = train_test_split(unique_accounts, test_size=0.3, random_state=888)
 
+    train_data = data[data['ACCT_NBR'].isin(train_accounts)]
+    test_data = data[data['ACCT_NBR'].isin(test_accounts)]
+
+    X_train = train_data.drop(columns=['label'])
+    y_train = train_data['label']
+    X_test = test_data.drop(columns=['label'])
+    y_test = test_data['label']
+
+    
+    
+    #X_train, y_train = balance_data(X_train, y_train)
+    print(X_train.head())
+    X_train_acc = X_train['ACCT_NBR']
+    X_train = X_train.drop(columns=['ACCT_NBR'])
+    X_test_acc = X_test['ACCT_NBR']
+    X_test = X_test.drop(columns=['ACCT_NBR'])
+
+    X_train, y_train = balance_data(X_train, y_train)
+
+    
     # Create DMatrix for XGBoost
     dtrain = xgb.DMatrix(X_train, label=y_train)
     dtest = xgb.DMatrix(X_test, label=y_test)
@@ -52,6 +74,7 @@ def xgboost_by_transaction(data,label):
     preds = bst.predict(dtest)
     predictions = [1 if p > 0.5 else 0 for p in preds]
     print_result(predictions, y_test)
+    X_test['ACCT_NBR'] = X_test_acc
     ground_truth_vote = vote_for_prediction(y_test, X_test)
     pred_vote = vote_for_prediction(predictions, X_test)
     print_result(pred_vote, ground_truth_vote)
