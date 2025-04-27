@@ -247,17 +247,9 @@
       color: white;
     }
     
+    /* Remove search-bar styles since they're no longer needed */
     .search-bar {
-      display: flex;
-      margin-bottom: 20px;
-    }
-    
-    .search-bar input {
-      flex: 1;
-      padding: 10px 15px;
-      border: 1px solid var(--medium-gray);
-      border-radius: 4px 0 0 4px;
-      font-size: 14px;
+      display: none; /* Hide instead of removing to maintain compatibility */
     }
     
     .pagination {
@@ -366,10 +358,6 @@
         <div class="card-title">
           風險帳戶清單
           <button id="refreshBtn" class="refresh-btn">重新整理</button>
-        </div>
-        <div class="search-bar">
-          <input type="text" id="searchInput" placeholder="搜尋帳號..." />
-          <button id="searchBtn">搜尋</button>
         </div>
         <div id="tableContainer">
           <table id="accountsTable">

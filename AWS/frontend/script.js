@@ -2,6 +2,7 @@
     const API_ENDPOINT = 'https://ykc1w19h5f.execute-api.us-west-2.amazonaws.com/test/pred';
     const API_RATE_LIMIT = 500; // Max requests per second
     const PAGE_SIZE = 10; // Items per page
+    const DEMO_FILE_NAME = 'validation.csv'; // Demo file name
     
     let accounts = []; // Array to store all analyzed accounts
     let currentPage = 1;
@@ -12,6 +13,7 @@
     let riskChart = null; // Variable to store the chart instance
     let totalAccountsToProcess = 0;
     let processedAccounts = 0;
+    let demoFileSelected = false; // Flag to track if demo file is selected
     
     // DOM Elements
     const analyzeBtn = document.getElementById('fileActionBtn');
@@ -23,8 +25,6 @@
     const pagination = document.getElementById('pagination');
     const refreshBtn = document.getElementById('refreshBtn');
     const clearLogBtn = document.getElementById('clearLogBtn');
-    const searchInput = document.getElementById('searchInput');
-    const searchBtn = document.getElementById('searchBtn');
     const analyzedAccountsEl = document.getElementById('analyzedAccounts');
     const riskAccountsEl = document.getElementById('riskAccounts');
     const progressBar = document.getElementById('progressBar');
@@ -41,15 +41,10 @@
       setupFileActionButton();
       //refreshBtn.addEventListener('click', refreshData);
       clearLogBtn.addEventListener('click', clearLogs);
-      searchBtn.addEventListener('click', performSearch);
-      searchInput.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-          performSearch();
-        }
-      });
       
       // Add file change listener
       csvFileInput.addEventListener('change', function() {
+        demoFileSelected = false; // Reset demo file flag when user selects their own file
         if (csvFileInput.files.length > 0) {
           fileInputName.textContent = csvFileInput.files[0].name;
           analyzeBtn.textContent = '上傳並分析';
@@ -58,12 +53,47 @@
           analyzeBtn.textContent = '選擇檔案';
         }
       });
+      
+      // Add demo file button
+      setupDemoFileButton();
+    }
+    
+    // Setup demo file button
+    function setupDemoFileButton() {
+      // Create the demo file button
+      const demoFileBtn = document.createElement('button');
+      demoFileBtn.id = 'demoFileBtn';
+      demoFileBtn.textContent = '使用範例檔案';
+      
+      // Match the style of the main file action button
+      demoFileBtn.className = 'batch-analyze';
+      demoFileBtn.style.width = 'auto';
+      demoFileBtn.style.padding = '8px 15px'; 
+      demoFileBtn.style.display = 'inline-block';
+      demoFileBtn.style.marginLeft = '10px';
+      
+      // Insert the button after the analyze button
+      analyzeBtn.parentNode.insertBefore(demoFileBtn, analyzeBtn.nextSibling);
+      
+      // Add click event listener
+      demoFileBtn.addEventListener('click', selectDemoFile);
+    }
+    
+    // Select the demo file
+    function selectDemoFile() {
+      demoFileSelected = true;
+      fileInputName.textContent = DEMO_FILE_NAME;
+      analyzeBtn.textContent = '分析範例檔案';
+      addLogMessage(`已選擇範例檔案: ${DEMO_FILE_NAME}`, 'info');
     }
     
     // Setup the combined file action button
     function setupFileActionButton() {
       analyzeBtn.addEventListener('click', function() {
-        if (csvFileInput.files.length > 0) {
+        if (demoFileSelected) {
+          // Handle demo file analysis
+          startDemoFileAnalysis();
+        } else if (csvFileInput.files.length > 0) {
           // If file is selected, start analysis
           startAnalysis();
         } else {
@@ -71,6 +101,79 @@
           csvFileInput.click();
         }
       });
+    }
+    
+    // Start analysis with demo file
+    function startDemoFileAnalysis() {
+      // Disable button during processing
+      analyzeBtn.disabled = true;
+      
+      // Reset progress and show progress bar
+      resetProgress();
+      processingStatusContainer.style.display = 'block';
+      
+      addLogMessage(`開始分析範例檔案: ${DEMO_FILE_NAME}`, 'loading');
+      
+      // Fetch the demo file
+      fetch(`${DEMO_FILE_NAME}`)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('範例檔案載入失敗');
+          }
+          return response.text();
+        })
+        .then(csvText => {
+          // Process the CSV text directly
+          const lines = csvText.split('\n');
+          const headers = lines[0].split(',').map(header => header.trim());
+          const acctNbrIndex = headers.findIndex(h => h.toUpperCase() === 'ACCT_NBR');
+          
+          if (acctNbrIndex === -1) {
+            throw new Error('CSV 檔案中必須包含 ACCT_NBR 欄位');
+          }
+          
+          const accountsData = [];
+          
+          // Process each line (skip header)
+          for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (line) {
+              const values = line.split(',');
+              const accountId = values[acctNbrIndex];
+              const dataValues = [...values];
+              dataValues.splice(acctNbrIndex, 1);
+              const dataString = dataValues.join(',');
+              
+              accountsData.push({
+                accountId,
+                dataString,
+                allFields: values,
+                headers: headers
+              });
+            }
+          }
+          
+          totalAccountsToProcess = accountsData.length;
+          // Update the analyzed accounts count to match total accounts being processed
+          analyzedAccountsEl.textContent = totalAccountsToProcess;
+          addLogMessage(`範例檔案解析成功，開始處理 ${totalAccountsToProcess} 個帳戶`, 'success');
+          
+          // Queue up all accounts for processing
+          requestQueue = [...accountsData];
+          
+          // Update the initial progress
+          updateProgressBar();
+          
+          // Start processing the queue if not already processing
+          if (!isProcessing) {
+            processQueue();
+          }
+        })
+        .catch(error => {
+          addLogMessage(`範例檔案處理失敗: ${error.message}`, 'error');
+          analyzeBtn.disabled = false;
+          processingStatusContainer.style.display = 'none';
+        });
     }
     
     // Add a log message to the status panel
@@ -104,7 +207,12 @@
       const totalAccounts = accounts.length;
       const riskAccounts = accounts.filter(acc => acc.riskScore >= 0.7).length;
       
-      analyzedAccountsEl.textContent = totalAccounts;
+      // Only update the analyzed accounts count if it's smaller than total processed
+      // This prevents the count from going backwards during processing
+      if (parseInt(analyzedAccountsEl.textContent) < totalAccounts) {
+        analyzedAccountsEl.textContent = totalAccounts;
+      }
+      
       riskAccountsEl.textContent = riskAccounts;
       
       // Update the chart whenever stats are updated
@@ -194,11 +302,12 @@
       progressBar.style.width = '0%';
       progressBar.textContent = '0%';
       processingStatusContainer.style.display = 'none';
+      demoFileSelected = false; // Reset demo file flag when starting new analysis
     }
     
     // Update the accounts table
     function updateTable(filteredAccounts = null) {
-      const displayAccounts = filteredAccounts || accounts;
+      const displayAccounts = accounts; // Always display all accounts
       
       // Show/hide no data message
       if (displayAccounts.length === 0) {
@@ -235,7 +344,7 @@
         
         // Risk Score
         const scoreCell = document.createElement('td');
-        scoreCell.textContent = account.riskScore.toFixed(2);
+        scoreCell.textContent = account.riskScore.toFixed(4);
         row.appendChild(scoreCell);
         
         // Risk Level
@@ -464,6 +573,8 @@
       parseCSV(file)
         .then(accountsData => {
           totalAccountsToProcess = accountsData.length;
+          // Update the analyzed accounts count to match total accounts being processed
+          analyzedAccountsEl.textContent = totalAccountsToProcess;
           addLogMessage(`CSV 檔案解析成功，開始處理 ${totalAccountsToProcess} 個帳戶`, 'success');
           
           // Queue up all accounts for processing
@@ -489,9 +600,22 @@
       if (requestQueue.length === 0) {
         isProcessing = false;
         analyzeBtn.disabled = false;
-        analyzeBtn.textContent = '選擇檔案';
+        if (demoFileSelected) {
+          analyzeBtn.textContent = '分析範例檔案';
+        } else {
+          analyzeBtn.textContent = '選擇檔案';
+        }
         addLogMessage('所有帳戶分析完成', 'success');
+        
+        // Update the analyzed accounts count to match the total processed
+        // before updating stats to prevent potential race conditions
+        analyzedAccountsEl.textContent = totalAccountsToProcess;
+        
+        // Update other stats but preserve the account count
+        const currentCount = analyzedAccountsEl.textContent;
         updateStats();
+        analyzedAccountsEl.textContent = currentCount;
+        
         updateTable();
         // Hide progress bar after completion
         setTimeout(() => {
@@ -572,30 +696,6 @@
         
         // Log the error to console instead of UI to reduce clutter
         console.error(`處理帳戶 ${accountData.accountId} 時發生錯誤:`, error);
-      }
-    }
-    
-    
-    // Perform search
-    function performSearch() {
-      const searchTerm = searchInput.value.trim().toLowerCase();
-      
-      if (!searchTerm) {
-        updateTable();
-        return;
-      }
-      
-      const filteredAccounts = accounts.filter(account => 
-        account.accountId.toLowerCase().includes(searchTerm)
-      );
-      
-      currentPage = 1;
-      updateTable(filteredAccounts);
-      
-      if (filteredAccounts.length === 0) {
-        addLogMessage(`搜尋 "${searchTerm}" 無符合結果`, 'error');
-      } else {
-        addLogMessage(`搜尋 "${searchTerm}" 找到 ${filteredAccounts.length} 筆結果`, 'success');
       }
     }
     
