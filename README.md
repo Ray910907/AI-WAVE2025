@@ -50,8 +50,6 @@ Train a LightGBM model to detect fraudulent accounts and fill a template CSV wit
 ### ⚙️ Configuration
 - DATA_PATH (in `gbm.py`): default ./comp_data/Train/
 
-- Threshold (in CLI): default `0.5` for eval; override via `--threshold` flag
-
 ### 📦 Outputs
 - Model: `models/fraud_detection_model.txt`
 - Plots (in the `plots` folder):
