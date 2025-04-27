@@ -21,7 +21,7 @@ Train a LightGBM model to detect fraudulent accounts and fill a template CSV wit
 
 3. **Run full pipeline**
     ```bash
-    gbm.py
+    python gbm.py
     ```
 
 4. **Fill test CSV**
@@ -35,7 +35,7 @@ Train a LightGBM model to detect fraudulent accounts and fill a template CSV wit
 ### Project Structure
     ```
     .
-    ├─ lightgbm_fraud_detection.py   # core class + main()
+    ├─ gbm.py   # core class + main()
     ├─ simple-csv-filler.py          # fills test CSV with predictions
     ├─ train_file_reader.py          # train-data loader
     ├─ test_file_reader.py           # test-data loader
@@ -48,7 +48,7 @@ Train a LightGBM model to detect fraudulent accounts and fill a template CSV wit
     ```
 
 ### ⚙️ Configuration
-- DATA_PATH (in `lightgbm_fraud_detection.py`): default ./comp_data/Train/
+- DATA_PATH (in `gbm.py`): default ./comp_data/Train/
 
 - Threshold (in CLI): default `0.5` for eval; override via `--threshold` flag
 
