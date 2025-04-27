@@ -1,1 +1,76 @@
 # 服務器繁忙，請稍後再試
+
+## Fraud Detection Pipeline
+
+Train a LightGBM model to detect fraudulent accounts and fill a template CSV with predictions.
+
+## 🚀 Quickstart
+
+1. **Clone the repo**  
+   ```bash
+   git clone https://github.com/Ray910907/AI-WAVE2025.git
+   cd AI-WAVE2025
+    ```
+
+2. **Install dependencies**
+
+    To install dependencies, please run the following command:
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+3. **Run full pipeline**
+    ```bash
+    python lightgbm_fraud_detection.py
+    ```
+
+4. **Fill test CSV**
+    ```bash
+    python simple-csv-filler.py \
+    --template path/to/test_result.csv \
+    --output path/to/filled_test_result.csv \
+    --threshold 0.3
+    ```
+
+### Project Structure
+    ```
+    .
+    ├─ lightgbm_fraud_detection.py   # core class + main()
+    ├─ simple-csv-filler.py          # fills test CSV with predictions
+    ├─ train_file_reader.py          # train-data loader
+    ├─ test_file_reader.py           # test-data loader
+    ├─ utils.py                      # helpers: balance, split, metrics
+    ├─ comp_data/
+    │  ├─ Train/                     # training CSVs
+    │  └─ Test/                      # test CSVs
+    ├─ models/                       # saved model file
+    └─ plots/                        # evaluation plots
+    ```
+
+### ⚙️ Configuration
+- DATA_PATH (in `lightgbm_fraud_detection.py`): default ./comp_data/Train/
+
+- Threshold (in CLI): default `0.5` for eval; override via `--threshold` flag
+
+### 📦 Outputs
+- Model: `models/fraud_detection_model.txt`
+- Plots (in the `plots` folder):
+    ```
+        ├─ confusion_matrix.png
+        ├─ roc_curve.png
+        ├─ feature_importance.png
+        ├─ precision_recall_curve.png
+        ├─ shap_dependence_ACCT_OPEN_DT.png
+        ├─ shap_dependence_AUM_AMT.png
+        ├─ shap_dependence_DATE_OF_BIRTH.png
+        ├─ shap_dependence_TRN_CODE_20.png
+        ├─ shap_dependence_TX_DATE.png
+        ├─ shap_dependence_CHANNEL_CODE_18.png
+        ├─ threshold_optimization.png
+        └─ shap_summary.png
+    ```
+
+### 📝 Notes
+- GPU auto-enabled if CUDA + PyTorch detected.
+
+- Install shap for SHAP plots.
