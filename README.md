@@ -21,7 +21,7 @@ Train a LightGBM model to detect fraudulent accounts and fill a template CSV wit
 
 3. **Run full pipeline**
     ```bash
-    python lightgbm_fraud_detection.py
+    gbm.py
     ```
 
 4. **Fill test CSV**
