@@ -1,0 +1,82 @@
+import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from train_file_reader import train_file_reader
+from utils import *
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+import pandas as pd
+import numpy as np
+
+
+
+
+reader = train_file_reader('./comp_data/Train/')
+acco_info, label = reader.get_transaction_merge_into_account()
+trans = reader.transac_info
+
+
+# Group transactions by ACCT_NBR and find the top 5 TX_AMT for each account
+acct_nbr_indices = {}
+for idx, acct_nbr in enumerate(trans['ACCT_NBR']):
+    if acct_nbr not in acct_nbr_indices:
+        acct_nbr_indices[acct_nbr] = []
+    acct_nbr_indices[acct_nbr].append(idx)
+
+
+# Keep only the indices of the top 5 TX_AMT for each account
+for acct_nbr, indices in acct_nbr_indices.items():
+    indices.sort(key=lambda i: trans['TX_AMT'][i], reverse=True)  # Sort by TX_AMT in descending order
+    acct_nbr_indices[acct_nbr] = indices[:5]  # Keep only the top 5
+
+# For each row in acco_info, find corresponding rows in trans and concatenate
+extended_acco_info = []
+sum = 0
+#print(acco_info.shape)
+for _, row in acco_info.iterrows():
+    acct_nbr = row['ACCT_NBR']
+    if acct_nbr in acct_nbr_indices:
+        # Get the corresponding rows from trans
+        trans_rows = pd.DataFrame([trans.iloc[i].drop(labels=['ACCT_NBR']) for i in acct_nbr_indices[acct_nbr]])
+        # Concatenate the acco_info row with the transaction rows
+        extended_row = pd.Series()
+        for _, trans_row in trans_rows.iterrows():
+            trans_row_reset = trans_row.reset_index(drop=True)
+            trans_row_reset = trans_row_reset.values.flatten()
+            extended_row = pd.concat([extended_row, pd.Series(trans_row_reset)], ignore_index=True)
+        row_reset = row.drop(labels=['ACCT_NBR'])
+        row_reset = row_reset.reset_index(drop=True)
+        row_reset = row_reset.values.flatten()
+        extended_row = pd.concat([pd.Series(row_reset), extended_row], ignore_index=True)
+        
+        
+        # Flatten the extended_row to a one-dimensional array
+        
+        extended_acco_info.append(extended_row)
+
+
+max_columns = max(len(row) for row in extended_acco_info)
+for i in range(len(extended_acco_info)):
+    extended_acco_info[i] = pd.Series(extended_acco_info[i]).reindex(range(max_columns), fill_value=0)
+
+acco_info_extended = pd.DataFrame(extended_acco_info)
+# to int
+acco_info_extended = acco_info_extended.astype(int)
+
+print("Extended Account Info Shape:", acco_info_extended.shape)
+
+
+X_train, X_test, y_train, y_test = train_test_split(acco_info_extended, label, test_size=0.2, random_state=888)
+#X_train = X_train.drop(columns=['ACCT_NBR'], inplace=True)
+#X_train, y_train = balance_data(X_train, y_train)
+
+    # Create DMatrix for XGBoost
+
+
+    # Set XGBoost parameters
+model = RandomForestClassifier(n_estimators=100, random_state=42)
+model.fit(X_train, y_train)
+# Make predictions
+y_pred = model.predict(X_test)
+print_result(y_test, y_pred)
