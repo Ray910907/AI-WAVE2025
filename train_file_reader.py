@@ -1,5 +1,8 @@
 import pandas as pd
 import numpy as np
+from sklearn.preprocessing import LabelEncoder
+
+
 
 
 class train_file_reader:
@@ -10,51 +13,153 @@ class train_file_reader:
             'id':path + '(Train)ID_Data_202412.csv',
             'trsac':path + '(Train)SAV_TXN_Data_202412.csv',
         }
-        self.today = 18290
+        self.today = 18320
         self.read_account_info()
         self.read_transaction_info()
 
-    def get_transaction_merge_into_account(self) -> tuple[pd.DataFrame, pd.Series]:
+
+    def get_transaction_merge_into_account(self) -> pd.DataFrame:
         '''
-            把交易的資料融合進入帳戶資料中
+            把交易的資料融合進入帳戶資料中，並附上該帳戶前5大交易的完整資訊（欄位展開）
 
             return:
                 acc_info: 帳戶資料
-                label: 標籤
         '''
-
         # Customizable
         merge_processed = {
-            'TX_DATE': lambda x: (x.max()-x.min())/len(x) if len(x) > 1 else 30,
+            'TX_DATE': lambda x: (x.max() - x.min()) / len(x) if len(x) > 1 else 30,
         }
-        # Customizable
         fill_na = {
             'TX_DATE': 30,
             'TRN_COUNT': 0,
         }
 
-
-        # Process transaction information
+        # --- 基本聚合 ---
         transaction_info = self.transac_info.sort_values(by=['ACCT_NBR', 'TX_DATE'])
         transaction_aggregated = transaction_info.groupby('ACCT_NBR').agg(merge_processed).reset_index(drop=True)
         transaction_aggregated['ACCT_NBR'] = transaction_info['ACCT_NBR'].unique()
-        remaining_columns = set(transaction_info.columns) - {'ACCT_NBR'} - set(merge_processed.keys())
+
+        # --- ✨ 新增：每個帳戶的小額、中額、大額交易筆數 ✨ ---
+
+        # 先定義小中大額的範圍（你可以調整）
+        small_threshold = 500
+        large_threshold = 100000
+        
+        # 幫每筆交易標小中大
+        transaction_info['AMT_SIZE'] = pd.cut(
+            transaction_info['TX_AMT'],
+            bins=[1, small_threshold, large_threshold, np.inf],
+            labels=['small', 'medium', 'large']
+        )
+
+        # 算每個帳戶小中大額交易的筆數
+        amt_size_counts = transaction_info.pivot_table(
+            index='ACCT_NBR',
+            columns='AMT_SIZE',
+            values='TX_AMT',
+            aggfunc='count'
+        ).fillna(0).reset_index()
+
+
+        # 為了保險，確保三個欄位都有
+        for size in ['small', 'medium', 'large']:
+            if size not in amt_size_counts.columns:
+                amt_size_counts[size] = 0
+        
+        amt_ratio_counts = amt_size_counts
+        amt_size_counts = amt_size_counts.rename(columns={
+            'small': 'SMALL_TRN_COUNT',
+            'medium': 'MEDIUM_TRN_COUNT',
+            'large': 'LARGE_TRN_COUNT'
+        })
+        
+        amt_ratio_counts = amt_ratio_counts.rename(columns={
+            'small': 'SMALL_TRN_RATIO',
+            'medium': 'MEDIUM_TRN_RATIO',
+            'large': 'LARGE_TRN_RATIO'
+        })
+
+        sum = amt_size_counts['SMALL_TRN_COUNT'] + amt_size_counts['MEDIUM_TRN_COUNT'] + amt_size_counts['LARGE_TRN_COUNT']
+        
+        amt_ratio_counts['SMALL_TRN_RATIO'] /= sum
+        amt_ratio_counts['MEDIUM_TRN_RATIO'] /= sum
+        amt_ratio_counts['LARGE_TRN_RATIO'] /= sum
+        #print(amt_size_counts)
+
+        # merge 回 transaction_aggregated
+        transaction_aggregated = pd.merge(transaction_aggregated, amt_size_counts, on='ACCT_NBR', how='left')
+        transaction_aggregated = pd.merge(transaction_aggregated, amt_ratio_counts, on='ACCT_NBR', how='left')
+
+        # 填補空值
+        transaction_aggregated[['SMALL_TRN_COUNT', 'MEDIUM_TRN_COUNT', 'LARGE_TRN_COUNT','SMALL_TRN_RATIO','MEDIUM_TRN_RATIO','LARGE_TRN_RATIO']] = transaction_aggregated[
+            ['SMALL_TRN_COUNT', 'MEDIUM_TRN_COUNT', 'LARGE_TRN_COUNT','SMALL_TRN_RATIO','MEDIUM_TRN_RATIO','LARGE_TRN_RATIO']
+        ].fillna(0)
+        
+        transaction_info = transaction_info.drop(columns=['AMT_SIZE'])
+
+        remaining_columns = set(transaction_info.columns) - {'ACCT_NBR','AMT_SIZE'} - set(merge_processed.keys())
+
         for col in remaining_columns:
             transaction_aggregated[col] = transaction_info.groupby('ACCT_NBR')[col].mean().reset_index(drop=True)
 
         # Number of transactions
         transaction_aggregated['TRN_COUNT'] = transaction_info.groupby('ACCT_NBR').size().reset_index(drop=True)
 
-        # Merge
+        # --- ✨ 新增：取前5大交易，展開到欄位 ✨ ---
+        transaction_info_sorted = transaction_info.sort_values(by=['ACCT_NBR', 'TX_AMT'], ascending=[True, False])
+
+        top5 = transaction_info_sorted.groupby('ACCT_NBR').head(5)
+        top5['TOP_N'] = top5.groupby('ACCT_NBR').cumcount() + 1
+
+        le = LabelEncoder()
+        object_columns = top5.select_dtypes(include=['object']).columns
+
+        for col in object_columns:
+            top5[col] = top5[col].fillna('UNKNOWN')  # Or any placeholder you prefer
+        
+        for col in object_columns:
+            top5[col] = le.fit_transform(top5[col].astype(str))
+        
+        print("top5 中的欄位：", top5.columns)
+
+        # 每筆交易攤平成多欄（例如 TX_DATE_1, TX_AMT_1, MCC_CD_1）
+        top5_columns_to_expand = top5.columns.drop('ACCT_NBR')
+
+        top5_list = []
+        for n in range(1, 6):
+            temp = top5[top5['TOP_N'] == n].copy()
+            temp = temp.set_index('ACCT_NBR')
+            temp = temp[top5_columns_to_expand]  # ⭐ 只選這兩個欄位
+            temp.columns = [f"{col}_{n}" for col in temp.columns]
+            top5_list.append(temp)
+
+
+        # 把五組交易 merge 起來
+        if top5_list:
+            top5_merged = pd.concat(top5_list, axis=1)
+            top5_merged = top5_merged.reset_index()
+        else:
+            top5_merged = pd.DataFrame()
+
+        # --- 合併 ---
         acc_info = pd.merge(self.acc_info, transaction_aggregated, on='ACCT_NBR', how='left')
+        acc_info = pd.merge(acc_info, top5_merged, on='ACCT_NBR', how='left')
 
 
-        #fill NAN
+        # Fill NAN
         acc_info = acc_info.fillna(fill_na)
         for col in remaining_columns:
             acc_info[col] = acc_info[col].fillna(0)
-        acc_info = acc_info.drop(columns=['ACCT_NBR'], errors='ignore')
 
+        for col in top5_merged.columns:
+            #print(col)
+            if col != 'ACCT_NBR':
+                if acc_info[col].dtype == 'object':
+                    acc_info[col] = le.fit_transform(acc_info[col].fillna('UNKNOWN').astype(str))
+                else:
+                    acc_info[col] = acc_info[col].fillna(0)
+
+        acc_info = acc_info.drop(columns=['ACCT_NBR'])
         return acc_info, self.label
 
     def read_account_info(self) -> tuple[pd.DataFrame, pd.Series, dict]:
@@ -70,11 +175,11 @@ class train_file_reader:
             'AUM_AMT':'none',
             'DATE_OF_BIRTH':'none',
             'YEARLYINCOMELEVEL':'none',
-            'CNTY_CD':'one_hot_encode'
+            'CNTY_CD':'classify'
         }
         # Customizable
         classify_dict = {
-            'CNTY_CD': [['CN', 'TW', 'HK', 'MO', 'SG', 'JP', 'KR']]
+            'CNTY_CD': [[12]]
         }
 
         acc = pd.read_csv(self.pth['acc'])
@@ -149,8 +254,8 @@ class train_file_reader:
             'PB_BAL':'none',
             'OWN_TRANS_ACCT':'drop',
             'OWN_TRANS_ID':'classify',
-            'CHANNEL_CODE':'one_hot_encode',
-            'TRN_CODE':'one_hot_encode',
+            'CHANNEL_CODE':'classify',
+            'TRN_CODE':'classify',
             'BRANCH_NO':'drop',
             'EMP_NO':'drop',
             'mb_check':'none',
@@ -163,7 +268,9 @@ class train_file_reader:
         classify_dict = {
             'TX_TIME': [[0,1,2,3,4,5,6,20,21,22,23]],
             'OWN_TRANS_ID': [['ID99999']],
-            'DAY_OF_WEEK': [['Saturday', 'Sunday']]
+            'DAY_OF_WEEK': [['Saturday', 'Sunday']],
+            'TRN_CODE': [[1, 4, 7, 8, 21, 29, 30, 24, 25, 26, 27, 28, 36, 37, 38],[2, 3, 5, 10, 11, 12, 13, 14, 15, 16, 17, 20, 22, 23, 42, 44],[8, 9, 19, 52, 53, 54],[31, 32, 33, 34, 35, 39, 40, 45, 46, 47, 48, 49, 50],[6, 16, 41, 43, 51]],
+            'CHANNEL_CODE': [[13,14,15,16,17,18],[5,6,9,12],[1,2,3,4,8,10],[7,11,19]]
         }
 
         trsac = pd.read_csv(self.pth['trsac'])
@@ -210,7 +317,7 @@ class train_file_reader:
         else:
             for idx, std in enumerate(standard):
                 df[f"{column}_class_{idx}"] = df[column].apply(lambda x: 1 if x in std else 0)
-                df = df.drop(columns=[column])
+            df = df.drop(columns=[column])
         return df
 
 
