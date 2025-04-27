@@ -205,7 +205,7 @@
     // Update statistics
     function updateStats() {
       const totalAccounts = accounts.length;
-      const riskAccounts = accounts.filter(acc => acc.riskScore >= 0.7).length;
+      const riskAccounts = accounts.filter(acc => acc.riskScore >= 0.5).length;
       
       // Only update the analyzed accounts count if it's smaller than total processed
       // This prevents the count from going backwards during processing
