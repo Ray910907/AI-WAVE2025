@@ -52,21 +52,7 @@ Train a LightGBM model to detect fraudulent accounts and fill a template CSV wit
 
 ### 📦 Outputs
 - Model: `models/fraud_detection_model.txt`
-- Plots (in the `plots` folder):
-    ```
-        ├─ confusion_matrix.png
-        ├─ roc_curve.png
-        ├─ feature_importance.png
-        ├─ precision_recall_curve.png
-        ├─ shap_dependence_ACCT_OPEN_DT.png
-        ├─ shap_dependence_AUM_AMT.png
-        ├─ shap_dependence_DATE_OF_BIRTH.png
-        ├─ shap_dependence_TRN_CODE_20.png
-        ├─ shap_dependence_TX_DATE.png
-        ├─ shap_dependence_CHANNEL_CODE_18.png
-        ├─ threshold_optimization.png
-        └─ shap_summary.png
-    ```
+- Plots (in the `plots` folder)
 
 ### 📝 Notes
 - GPU auto-enabled if CUDA + PyTorch detected.
